@@ -66,14 +66,50 @@ label <- c(
 
 
 # Aplicando a função para todas as variáveis com lapply
-results_effect <- do.call(cbind, lapply(outcomes_principais, function(feature) {
-  process_feature(df = df, feature, type = "time_effect")
+results_mean_effect <- do.call(cbind, lapply(outcomes_principais, function(feature) {
+  process_feature(df = df, feature = feature, type = "mean")
 }))
 
-results_effect <- results_effect[-(12:18),]
-results_effect <- results_effect[,-c(3,5,7,9,11)]
+rowlab <- c("", "coef", "", "N", "School FE", "Time FE", "Census Control")
+results_mean_effect <- results_mean_effect[-1]
+results_mean_effect <- cbind(rowlab, results_mean_effect)
+names(results_mean_effect) <- c("", paste0("(", 1:(ncol(results_mean_effect)-1), ")"))
 
-names(results_effect) <- c("",paste0("(",1:(ncol(results_effect)-1),")"))
+
+results_effect <- do.call(cbind, lapply(outcomes_principais, function(feature) {
+  process_feature(df = df, feature = feature, type = "time_effect")
+}))
 
 
-write_xlsx(results_effect, "./results/tb_results_effects_outros_outcomes_infraestrutura.xlsx")
+rowlab <- c(
+  outcomes_principais[1],
+  as.vector(rbind(paste0("Treat ", 1:9), rep("", 9))),
+  "N", "School FE", "Time FE", "Census Control"
+)
+results_effect <- results_effect[-1]
+results_effect <- cbind(rowlab, results_effect)
+
+names(results_effect) <- c("", paste0("(", 1:(ncol(results_effect)-1), ")"))
+
+
+
+results_mean_effect <- to_df_fix_names(results_mean_effect)
+results_effect      <- to_df_fix_names(results_effect)
+
+# --- alinha colunas ---
+all_cols <- union(names(results_mean_effect), names(results_effect))
+
+
+results_mean_effect <- add_missing_cols(results_mean_effect, all_cols)
+results_effect      <- add_missing_cols(results_effect, all_cols)
+
+# --- linha em branco ---
+blank_row <- as.data.frame(as.list(rep("", length(all_cols))),
+                           stringsAsFactors = FALSE, check.names = FALSE)
+names(blank_row) <- all_cols
+
+# --- junta (mean em cima, depois time) ---
+results_all <- rbind(results_mean_effect, blank_row, results_effect)
+rownames(results_all) <- NULL
+
+write_xlsx(results_all, "./results/tb_results_effects_outros_outcomes.xlsx")
