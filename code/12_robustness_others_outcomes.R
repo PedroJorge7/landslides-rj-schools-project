@@ -71,7 +71,7 @@ results_mean_effect <- do.call(cbind, lapply(outcomes_principais, function(featu
 }))
 
 rowlab <- c("", "coef", "", "N", "School FE", "Time FE", "Census Control")
-results_mean_effect <- results_mean_effect[-1]
+# results_mean_effect <- results_mean_effect[-1]
 results_mean_effect <- cbind(rowlab, results_mean_effect)
 names(results_mean_effect) <- c("", paste0("(", 1:(ncol(results_mean_effect)-1), ")"))
 
@@ -86,7 +86,7 @@ rowlab <- c(
   as.vector(rbind(paste0("Treat ", 1:9), rep("", 9))),
   "N", "School FE", "Time FE", "Census Control"
 )
-results_effect <- results_effect[-1]
+# results_effect <- results_effect[-1]
 results_effect <- cbind(rowlab, results_effect)
 
 names(results_effect) <- c("", paste0("(", 1:(ncol(results_effect)-1), ")"))
