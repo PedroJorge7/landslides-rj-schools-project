@@ -18,19 +18,14 @@ outcomes_principais     <- c('fechamento','log_docente',
                              'log_salas','log_num_funcionarios')
 
 label <- c(
-  'School Closure',
-  'Log of Number of Teachers',
-  'Log of Number of Class',
-  'Log of Number of Staff'
+  'A. School Closure',
+  'B. Log of Number of Teachers',
+  'C. Log of Number of Class',
+  'D. Log of Number of Staff'
 )
 
 
-label <- c(
-  "Fechamento da Escola",
-  "Logaritmo do Número de Docentes",
-  "Logaritmo do Número de Salas Existentes",
-  "Logaritmo do Número de Funcionários"
-)
+
 
 
 

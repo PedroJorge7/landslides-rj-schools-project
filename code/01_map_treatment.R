@@ -32,7 +32,7 @@ municipio <- read_municipality(code_muni = 'all', year = 2017) %>%
     )),
     Afetados = afetados + calamidade + maiores_afetados,
     Afetados = ifelse(Afetados == 3, "Maiores Afetados",
-               Zifelse(Afetados == 2, "Afetados e calamidade",
+               ifelse(Afetados == 2, "Afetados e calamidade",
                ifelse(Afetados == 1, "Afetados", "Não Afetado")))
   ) %>% 
   st_as_sf()
@@ -99,10 +99,10 @@ ggplot(data = raio_otimo, aes(x = Runnout3 / 1000)) +
   geom_histogram(fill = "steelblue", color = "white", alpha = 0.7, bins = 30) +
   geom_vline(aes(xintercept = mean(Runnout3 / 1000)), linetype = "dashed", color = "darkred", size = 0.8) +
   annotate("text", x = mean(raio_otimo$Runnout3)/1000 + 2, y = Inf, vjust = 1.5,
-           label = paste0("Média = ", round(mean(raio_otimo$Runnout3)/1000, 2), " km\n",
-                          "DP = ", round(sd(raio_otimo$Runnout3)/1000, 2), " km"),
+           label = paste0("Mean = ", round(mean(raio_otimo$Runnout3)/1000, 2), " km\n",
+                          "SD = ", round(sd(raio_otimo$Runnout3)/1000, 2), " km"),
            hjust = 0, size = 4.2) +
-  labs(x = "Run-out distance (km)", y = "Frequência") +
+  labs(x = "Run-out distance (km)", y = "Frequency") +
   scale_x_continuous(expand = c(0, 0)) +
   scale_y_continuous(expand = c(0, 0)) +
   theme_minimal(base_size = 12) +
@@ -114,7 +114,7 @@ ggplot(data = raio_otimo, aes(x = Runnout3 / 1000)) +
   )
 
 
-ggsave('./results/histograma.jpg', width = 15, height = 12, units = 'cm',
+ggsave('./results/histograma.jpg', width = 15, height = 10, units = 'cm',
        dpi=300)
 
 ## Map
@@ -210,7 +210,7 @@ gg_inset_map1 = cowplot::ggdraw() +
 
 gg_inset_map1
 
-ggsave('./results/affected_region.jpg', width = 20, height = 12, units = 'cm', dpi=300)
+ggsave('./results/affected_region.jpg', width = 20, height = 10, units = 'cm', dpi=300)
 
 geocode <- geocode %>%
   mutate(variable = case_when(
@@ -343,5 +343,5 @@ p <- ggplot() +
 
 p
 
-ggsave('./results/pontos deslizamentos.jpg', width = 15, height = 12, units = 'cm',
+ggsave('./results/pontos deslizamentos.jpg', width = 15, height = 10, units = 'cm',
        dpi=300)
