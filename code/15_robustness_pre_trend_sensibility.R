@@ -40,17 +40,30 @@ Mbarvec <- seq(0, 1, by = 0.1)
 dir.create("./results", showWarnings = FALSE)
 
 style_honest <- function(p, ttl) {
+  line_color <- "#2E5E7E"
+  fill_color <- scales::alpha("#2E5E7E", 0.18)
+
   for (i in seq_along(p$layers)) {
     g <- p$layers[[i]]$geom
+
     if (inherits(g, "GeomErrorbar") ||
         inherits(g, "GeomLinerange") ||
         inherits(g, "GeomSegment") ||
         inherits(g, "GeomPointrange") ||
-        inherits(g, "GeomPoint")) {
-      p$layers[[i]]$aes_params$colour <- "red"
+        inherits(g, "GeomPoint") ||
+        inherits(g, "GeomLine") ||
+        inherits(g, "GeomPath")) {
+      p$layers[[i]]$aes_params$colour <- line_color
+    }
+
+    if (inherits(g, "GeomRibbon") ||
+        inherits(g, "GeomArea") ||
+        inherits(g, "GeomPolygon")) {
+      p$layers[[i]]$aes_params$fill <- fill_color
+      p$layers[[i]]$aes_params$colour <- line_color
     }
   }
-  
+
   p +
     labs(title = ttl, x = "M", y = "Coefficient") +
     guides(color = "none", fill = "none") +
@@ -129,3 +142,4 @@ ggsave(
   plot = fig_final,
   width = 32, height = 18, units = "cm", dpi = 300
 )
+

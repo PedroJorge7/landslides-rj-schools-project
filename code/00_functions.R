@@ -1,10 +1,10 @@
 process_feature <- function(df, feature, type, cluster_var = "code_inep") {
   if (!type %in% c("mean", "time_effect", "event_study")) {
-    stop("Tipo inválido. Escolha entre 'mean', 'time_effect', ou 'event_study'.")
+    stop("Tipo invalido. Escolha entre 'mean', 'time_effect', ou 'event_study'.")
   }
   
   if (length(unique(df[[feature]])) <= 1) {
-    warning(paste("A variável", feature, "não tem variação suficiente."))
+    warning(paste("A variavel", feature, "nao tem variacao suficiente."))
     return(NULL)
   }
   
@@ -266,11 +266,11 @@ process_feature <- function(df, feature, type, cluster_var = "code_inep") {
 
 process_plot_data <- function(df = df_balanceado, feature, type, verbose = TRUE, cluster_var = "code_inep") {
   if (!type %in% c("time_effect", "event_study")) {
-    stop("Tipo inválido. Escolha entre 'time_effect' ou 'event_study'.")
+    stop("Tipo invalido. Escolha entre 'time_effect' ou 'event_study'.")
   }
   
   if (length(unique(df[[feature]])) <= 1 || sd(df[[feature]], na.rm = TRUE) < 1e-6) {
-    if (verbose) warning(paste("A variável", feature, "não tem variação suficiente."))
+    if (verbose) warning(paste("A variavel", feature, "nao tem variacao suficiente."))
     return(data.frame(term = NA, estimate = NA, std.error = NA, statistic = NA,
                       p.value = NA, type = NA, Regression = NA,
                       conf.low = NA, conf.high = NA, nobs = NA))
@@ -358,41 +358,201 @@ add_missing_cols <- function(x, cols){
 
 
 plot_event_study <- function(x) {
-  output %>%
+  plot_data <- output %>%
     filter(type == "event_study") %>%
     filter(Regression == x) %>%
-    mutate(parmseq = as.numeric(term)) %>%
-    ggplot(aes(x = parmseq, y = estimate, group = 1)) +
-    geom_ribbon(aes(ymax = conf.high, ymin = conf.low), fill = "grey90", alpha = 0.5) +
-    geom_line(aes(parmseq, conf.high), color = "grey30", size = 0.1) +
-    geom_line(aes(parmseq, conf.low), color = "grey30", size = 0.1) + 
-    geom_point(size = 2, color = "dodgerblue", fill = "black") +
-    geom_line(color = "dodgerblue", size = 1) +
-    scale_x_continuous(breaks = c(-3:9), labels = c(-3:9)) +
-    geom_hline(yintercept = 0) +
-    geom_vline(xintercept = 0) +
-    labs(x = 'Years', y = 'Coefficient', title = label[match(x, outcomes_principais)]) +
-    theme_bw() + 
-    theme(legend.position = "bottom")
-}
+    mutate(parmseq = as.numeric(term))
 
-
-# Função para plotar os gráficos
-plot_event_time <- function(x){
-  output %>% 
-    filter(Regression == x) %>% 
-    ggplot(aes(y = term, x = estimate, color = tipo)) +
-    geom_pointrange(
-      aes(xmax = conf.high, xmin = conf.low),
-      size = 0.5 , position = position_dodge(width=0.5)
+  ggplot(plot_data, aes(x = parmseq, y = estimate)) +
+    geom_errorbar(
+      aes(ymin = conf.low, ymax = conf.high),
+      width = 0.12,
+      linewidth = 0.55,
+      color = "#2E5E7E"
     ) +
-    geom_vline(xintercept = 0, linetype = "dashed") +
-    #scale_y_discrete(limits = c( "2011", "2012","2013", "2014", "2015")) + 
-    labs(x = 'Coefficient', y = 'Year', title = label[match(x, outcomes_principais)],
-         color = "") +
-    scale_color_manual(values= paletteer::paletteer_c("ggthemes::Blue", length(unique(output$tipo)) + 1)[-1]) +
-    coord_flip() +
-    theme_bw() + 
-    theme(legend.position = "bottom")
+    geom_point(size = 2.8, color = "dodgerblue4") +
+    geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.5, color = "black") +
+    scale_x_continuous(breaks = sort(unique(plot_data$parmseq))) +
+    labs(
+      x = "Anos de exposicao",
+      y = "Coeficiente estimado",
+      title = label[match(x, outcomes_principais)]
+    ) +
+    theme_classic(base_size = 12) +
+    theme(
+      plot.title = element_text(hjust = 0.5),
+      panel.grid.major.y = element_line(color = "grey88"),
+      panel.grid.minor = element_blank()
+    )
 }
 
+
+# Funcao para plotar os graficos
+event_time_palette <- function(n) {
+  base_colors <- c("#0F4C5C", "#E36414", "#6A994E", "#BC4749", "#7A3E9D", "#3A7CA5")
+  if (n <= 0) {
+    return(character(0))
+  }
+  if (n <= length(base_colors)) {
+    return(base_colors[seq_len(n)])
+  }
+  grDevices::colorRampPalette(base_colors)(n)
+}
+
+
+event_time_shapes <- function(n) {
+  base_shapes <- c(21, 24, 22, 23, 25)
+  rep(base_shapes, length.out = n)
+}
+
+
+event_time_title <- function(x) {
+  if (exists("label", inherits = TRUE) && exists("outcomes_principais", inherits = TRUE)) {
+    plot_labels <- get("label", inherits = TRUE)
+    plot_outcomes <- get("outcomes_principais", inherits = TRUE)
+    plot_title <- plot_labels[match(x, plot_outcomes)]
+    if (length(plot_title) == 1 && !is.na(plot_title) && nzchar(plot_title)) {
+      return(plot_title)
+    }
+  }
+  x
+}
+
+
+event_time_regressions <- function(data) {
+  regressions <- unique(data$Regression)
+  if (exists("outcomes_principais", inherits = TRUE)) {
+    ordered <- get("outcomes_principais", inherits = TRUE)
+    regressions <- c(intersect(ordered, regressions), setdiff(regressions, ordered))
+  }
+  regressions
+}
+
+
+plot_event_time <- function(x, data = output, style = getOption("plot_event_time_style", "legacy")){
+  plot_data <- data %>%
+    filter(Regression == x) %>%
+    filter(!is.na(term), !is.na(estimate), !is.na(conf.low), !is.na(conf.high)) %>%
+    mutate(tipo = factor(tipo, levels = unique(tipo)))
+
+  if (!nrow(plot_data)) {
+    stop(paste("No valid plot data found for regression", x))
+  }
+
+  palette <- paletteer::paletteer_c("ggthemes::Blue", length(levels(plot_data$tipo)) + 1)[-1]
+  names(palette) <- levels(plot_data$tipo)
+  plot_title <- event_time_title(x)
+
+  if (style == "connected") {
+    style <- "legacy"
+  }
+
+  if (style == "legacy") {
+    legacy_dodge <- position_dodge(width = 0.5)
+
+    return(
+      plot_data %>%
+        mutate(term = factor(term, levels = sort(unique(term)))) %>%
+        ggplot(aes(x = term, y = estimate, color = tipo, group = tipo)) +
+        geom_hline(yintercept = 0, linetype = "dashed", color = "grey45", linewidth = 0.5) +        geom_errorbar(
+          aes(ymin = conf.low, ymax = conf.high),
+          width = 0.18,
+          linewidth = 0.55,
+          position = legacy_dodge
+        ) +
+        geom_point(
+          size = 2,
+          position = legacy_dodge
+        ) +
+        labs(x = "Year", y = "Coefficient", title = plot_title, color = "") +
+        scale_color_manual(values = palette) +
+        theme_bw() +
+        theme(legend.position = "bottom")
+    )
+  }
+
+  if (style == "line_ribbon") {
+    ribbon_dodge <- position_dodge(width = 0.35)
+
+    return(
+      ggplot(plot_data, aes(x = term, y = estimate, color = tipo, group = tipo)) +
+        geom_hline(yintercept = 0, linetype = "dashed", color = "grey45", linewidth = 0.5) +        geom_errorbar(
+          aes(ymin = conf.low, ymax = conf.high),
+          width = 0.16,
+          linewidth = 0.55,
+          position = ribbon_dodge
+        ) +
+        geom_point(size = 2.2, position = ribbon_dodge) +
+        scale_x_continuous(breaks = sort(unique(plot_data$term))) +
+        scale_color_manual(values = palette) +
+        labs(x = "Year", y = "Coefficient", title = plot_title, color = "") +
+        theme_minimal(base_size = 11) +
+        theme(
+          legend.position = "top",
+          panel.grid.minor = element_blank(),
+          panel.grid.major.x = element_line(color = "grey85"),
+          panel.grid.major.y = element_line(color = "grey90"),
+          plot.title = element_text(face = "bold")
+        )
+    )
+  }
+
+  if (style == "lollipop") {
+    dodge_width <- if (length(levels(plot_data$tipo)) > 3) 0.7 else 0.55
+
+    return(
+      ggplot(plot_data, aes(x = factor(term), y = estimate, color = tipo)) +
+        geom_hline(yintercept = 0, linetype = "dashed", color = "grey45", linewidth = 0.5) +
+        geom_segment(
+          aes(xend = factor(term), y = 0, yend = estimate),
+          position = position_dodge(width = dodge_width),
+          linewidth = 0.55, alpha = 0.55
+        ) +
+        geom_errorbar(
+          aes(ymin = conf.low, ymax = conf.high),
+          width = 0.16,
+          position = position_dodge(width = dodge_width),
+          linewidth = 0.75
+        ) +
+        geom_point(
+          position = position_dodge(width = dodge_width),
+          size = 2.4
+        ) +
+        scale_color_manual(values = palette) +
+        labs(x = "Year", y = "Coefficient", title = plot_title, color = "") +
+        theme_light(base_size = 11) +
+        theme(
+          legend.position = "bottom",
+          panel.grid.minor = element_blank(),
+          panel.grid.major.x = element_blank(),
+          plot.title = element_text(face = "bold")
+        )
+    )
+  }
+
+  stop(paste("Unknown plot style:", style))
+}
+
+
+plot_event_time_grid <- function(data = output,
+                                 style = getOption("plot_event_time_style", "legacy"),
+                                 nrow = 2,
+                                 ncol = 2,
+                                 legend = NULL) {
+  regressions <- event_time_regressions(data)
+  plot_list <- lapply(regressions, function(reg) {
+    plot_event_time(reg, data = data, style = style)
+  })
+
+  if (is.null(legend)) {
+    legend <- if (style == "line_ribbon") "top" else "bottom"
+  }
+
+  ggpubr::ggarrange(
+    plotlist = plot_list,
+    nrow = nrow,
+    ncol = ncol,
+    common.legend = TRUE,
+    legend = legend
+  )
+}

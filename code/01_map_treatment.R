@@ -12,28 +12,28 @@ municipio <- read_municipality(code_muni = 'all', year = 2017) %>%
   filter(abbrev_state == "RJ") %>% 
   mutate(
     afetados = as.integer(name_muni %in% c(
-      "Areal","Bom Jardim","Nova Friburgo","São José Do Vale Do Rio Preto",
-      "Sumidouro","Petrópolis","Teresópolis","Santa Maria Madalena",
-      "Sapucaia","Paraíba Do Sul","São Sebastião Do Alto","Três Rios",
+      "Areal","Bom Jardim","Nova Friburgo","SÃ£o JosÃ© Do Vale Do Rio Preto",
+      "Sumidouro","PetrÃ³polis","TeresÃ³polis","Santa Maria Madalena",
+      "Sapucaia","ParaÃ­ba Do Sul","SÃ£o SebastiÃ£o Do Alto","TrÃªs Rios",
       "Cordeiro","Carmo","Macuco","Cantagalo"
     )),
     calamidade = as.integer(name_muni %in% c(
-      "Areal","Bom Jardim","Nova Friburgo","São José Do Vale Do Rio Preto",
-      "Sumidouro","Petrópolis","Teresópolis"
+      "Areal","Bom Jardim","Nova Friburgo","SÃ£o JosÃ© Do Vale Do Rio Preto",
+      "Sumidouro","PetrÃ³polis","TeresÃ³polis"
     )),
     maiores_afetados = as.integer(name_muni %in% c(
-      "Nova Friburgo","Petrópolis","Teresópolis"
+      "Nova Friburgo","PetrÃ³polis","TeresÃ³polis"
     )),
     arredores = as.integer(name_muni %in% c(
-      "Areal","Paraíba Do Sul","Nova Friburgo","Petrópolis","Teresópolis",
-      "Bom Jardim","São José Do Vale Do Rio Preto","Sumidouro",
-      "Cachoeiras De Macacu","Duas Barras","Sapucaia","Três Rios",
-      "Magé","Guapimirim","Silva Jardim","Duque De Caxias","Cordeiro"
+      "Areal","ParaÃ­ba Do Sul","Nova Friburgo","PetrÃ³polis","TeresÃ³polis",
+      "Bom Jardim","SÃ£o JosÃ© Do Vale Do Rio Preto","Sumidouro",
+      "Cachoeiras De Macacu","Duas Barras","Sapucaia","TrÃªs Rios",
+      "MagÃ©","Guapimirim","Silva Jardim","Duque De Caxias","Cordeiro"
     )),
     Afetados = afetados + calamidade + maiores_afetados,
     Afetados = ifelse(Afetados == 3, "Maiores Afetados",
                ifelse(Afetados == 2, "Afetados e calamidade",
-               ifelse(Afetados == 1, "Afetados", "Não Afetado")))
+               ifelse(Afetados == 1, "Afetados", "NÃ£o Afetado")))
   ) %>% 
   st_as_sf()
 
@@ -43,7 +43,7 @@ arredores <- subset(municipio,arredores==1) %>% sf::st_transform(32723)
 
 ### Leitura dos dados da rais -----
 
-# Definição da abreviação
+# DefiniÃ§Ã£o da abreviaÃ§Ã£o
 informacao <- municipio %>% filter(arredores==1)
 
 
@@ -126,111 +126,174 @@ micro <- read_micro_region(code_micro='RJ') %>%
 
 #raio_mapa <- raio %>% st_union()
 
-gg1 = ggplot() +
-  geom_sf(data = geobr::read_country(), fill = "white") +
-  geom_sf(data = subset(estados,code_state==33), fill = "red", color = "red", size = 1.2) +
-  theme_bw() +
-  theme(axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        axis.title.y=element_blank(),
-        axis.text.y=element_blank(),
-        axis.ticks.y=element_blank(),
-        panel.grid = element_blank())
-
-
-temporary <- municipio %>% filter(Afetados %in% c("Maiores Afetados",
-                                                  "Afetados e calamidade")) %>% 
-  st_transform(crs = st_crs(4326))
-
-temporary2 <- geobr::read_municipality(code_muni = 'RJ') %>% 
-  filter(as.numeric(substr(code_muni,1,6)) %in% temporary$code_muni)
-
-temporary_name <- cbind(temporary2,
-                        st_coordinates(st_centroid(temporary2$geom)))
-
-temporary_name <- temporary_name %>% 
-  mutate(name_muni = ifelse(name_muni == "São José Do Vale Do Rio Preto",
-                            'SJVRP',name_muni),
-         Y = ifelse(name_muni == "Nova Friburgo",Y-0.05,Y),
-         X = ifelse(name_muni == "Nova Friburgo",X+0.05,X))
-
 rj <- geobr::read_municipality(code_muni = 'RJ')
 
-levels = c(
-  "Não Afetado" = "Sem Impacto",
-  "Afetados" = "Impacto Moderado",
-  "Afetados e calamidade" = "Impacto Severo (Calamidade)",
-  "Maiores Afetados" = "Impacto Crítico"
+displaced_share <- tibble::tribble(
+  ~code_muni, ~displaced_share,
+  330580, 0.41,
+  330340, 0.23,
+  330390, 0.17,
+  330022, 0.09,
+  330515, 0.05,
+  330050, 0.04,
+  330570, 0.01
 )
 
-# Atualizando as categorias com nomes mais claros
-municipio$Afetados <- recode_factor(
-  municipio$Afetados,
-  "Não Afetado" = "Sem Impacto",
-  "Afetados" = "Impacto Moderado",
-  "Afetados e calamidade" = "Impacto Severo (Calamidade)",
-  "Maiores Afetados" = "Impacto Crítico"
-)
+municipio <- municipio %>%
+  left_join(displaced_share, by = 'code_muni')
 
-# Mapa com nova legenda e cores coerentes com intensidade
-gg2 <- ggplot() + 
-  geom_sf(data = rj, fill = "white", color = "black", size = 0.3) +
-  # geom_sf(data = municipio, aes(fill = Afetados), color = "grey40", size = 0.2) +
-  # scale_fill_manual(
-  #   values = c(
-  #     "Sem Impacto" = "white",
-  #     "Impacto Moderado" = "#FED976",
-  #     "Impacto Severo (Calamidade)" = "#FC4E2A",
-  #     "Impacto Crítico" = "#BD0026"
-  #   )
-  # ) +
-  labs(fill = "Nível de Impacto") +
+share_map <- municipio %>%
+  filter(!is.na(displaced_share))
+
+bbox_area <- sf::st_bbox(share_map)
+x_range <- bbox_area['xmax'] - bbox_area['xmin']
+y_range <- bbox_area['ymax'] - bbox_area['ymin']
+
+bbox_area_expanded <- bbox_area
+bbox_area_expanded['xmin'] <- bbox_area['xmin'] - 0.35 * x_range
+bbox_area_expanded['xmax'] <- bbox_area['xmax'] + 0.35 * x_range
+bbox_area_expanded['ymin'] <- bbox_area['ymin'] - 0.25 * y_range
+bbox_area_expanded['ymax'] <- bbox_area['ymax'] + 0.25 * y_range
+
+zoom_box <- sf::st_as_sfc(bbox_area_expanded)
+sf::st_crs(zoom_box) <- sf::st_crs(municipio)
+
+share_palette <- c('#FFF7BC', '#FEC44F', '#FD8D3C', '#F03B20', '#BD0026')
+share_breaks <- c(0.01, 0.05, 0.10, 0.20, 0.40)
+
+legend_map <- ggplot() +
+  geom_sf(data = municipio, fill = 'grey80', color = 'grey55', linewidth = 0.2) +
+  geom_sf(data = share_map, aes(fill = displaced_share), color = 'grey45', linewidth = 0.2) +
+  scale_fill_gradientn(
+    colours = share_palette,
+    values = scales::rescale(c(0.01, 0.05, 0.10, 0.20, 0.41)),
+    limits = c(0.01, 0.41),
+    breaks = share_breaks,
+    labels = scales::label_percent(accuracy = 1),
+    guide = guide_colorbar(
+      title = 'Displaced share',
+      direction = 'horizontal',
+      title.position = 'top',
+      title.hjust = 0,
+      label.position = 'bottom',
+      ticks = FALSE,
+      frame.colour = 'grey65',
+      barwidth = unit(4.4, 'cm'),
+      barheight = unit(0.24, 'cm')
+    )
+  ) +
   theme_void() +
-  annotation_scale(location = "bl", width_hint = 0.25, pad_x = unit(3.3, "in")) +
-  annotation_north_arrow(location = "bl", which_north = "true",
-                         pad_x = unit(4, "in"), pad_y = unit(3, "in"),
-                         style = north_arrow_fancy_orienteering) +
   theme(
-    legend.position = "bottom",
-    legend.title = element_text(size = 11, face = "bold"),
-    legend.text = element_text(size = 10),
-    axis.title = element_blank(),
-    axis.text  = element_blank(),
-    axis.ticks = element_blank()
+    legend.position = 'bottom',
+    legend.justification = 'left',
+    legend.box.margin = margin(0, 0, 0, 0),
+    legend.margin = margin(0, 0, 0, 0),
+    legend.title = element_text(face = 'bold', size = 8.8),
+    legend.text = element_text(size = 7.8),
+    legend.spacing.x = unit(0.04, 'cm')
   )
 
+legend_grob <- cowplot::get_legend(legend_map)
 
+main_map <- ggplot() +
+  geom_sf(data = municipio, fill = 'grey80', color = 'grey55', linewidth = 0.2) +
+  geom_sf(data = share_map, aes(fill = displaced_share), color = 'grey45', linewidth = 0.2) +
+  scale_fill_gradientn(
+    colours = share_palette,
+    values = scales::rescale(c(0.01, 0.05, 0.10, 0.20, 0.41)),
+    limits = c(0.01, 0.41),
+    guide = 'none'
+  ) +
+  coord_sf(
+    xlim = c(bbox_area_expanded['xmin'], bbox_area_expanded['xmax']),
+    ylim = c(bbox_area_expanded['ymin'], bbox_area_expanded['ymax']),
+    expand = FALSE
+  ) +
+  theme_void() +
+  theme(
+    plot.background = element_rect(fill = 'white', color = 'black', linewidth = 0.8),
+    panel.background = element_rect(fill = 'white', color = NA),
+    plot.margin = margin(4, 4, 4, 4)
+  )
 
+rj_inset <- ggplot() +
+  geom_sf(data = municipio, fill = 'grey80', color = 'grey55', linewidth = 0.15) +
+  geom_sf(data = share_map, aes(fill = displaced_share), color = 'grey45', linewidth = 0.15) +
+  geom_sf(data = zoom_box, fill = NA, color = 'black', linewidth = 0.55, linetype = 'dashed') +
+  scale_fill_gradientn(
+    colours = share_palette,
+    values = scales::rescale(c(0.01, 0.05, 0.10, 0.20, 0.41)),
+    limits = c(0.01, 0.41),
+    guide = 'none'
+  ) +
+  theme_void() +
+  theme(
+    plot.background = element_rect(fill = 'white', color = 'black', linewidth = 0.8),
+    panel.background = element_rect(fill = 'white', color = NA),
+    plot.margin = margin(4, 4, 4, 4)
+  )
 
-gg_inset_map1 = cowplot::ggdraw() +
-  cowplot::draw_plot(gg2) +
-  cowplot::draw_plot(gg1, x = 0.001, y = 0.68,
-                     width = 0.3, height = 0.3)
+brazil_inset <- ggplot() +
+  geom_sf(data = geobr::read_country(), fill = 'white', color = 'grey75', linewidth = 0.15) +
+  geom_sf(data = subset(estados, code_state == 33), fill = '#F03B20', color = 'grey50', linewidth = 0.35) +
+  theme_void() +
+  theme(
+    plot.background = element_rect(fill = 'white', color = 'black', linewidth = 0.8),
+    panel.background = element_rect(fill = 'white', color = NA),
+    plot.margin = margin(4, 4, 4, 4)
+  )
 
-gg_inset_map1
+affected_region_plot <- cowplot::ggdraw() +
+  cowplot::draw_plot(main_map, x = 0.00, y = 0.15, width = 0.71, height = 0.70) +
+  cowplot::draw_plot(rj_inset, x = 0.75, y = 0.60, width = 0.22, height = 0.26) +
+  cowplot::draw_plot(brazil_inset, x = 0.79, y = 0.15, width = 0.14, height = 0.21) +
+  cowplot::draw_label('Rio de Janeiro', x = 0.86, y = 0.91, fontface = 'bold', size = 13) +
+  cowplot::draw_label('Brazil', x = 0.86, y = 0.11, fontface = 'bold', size = 13) +
+  cowplot::draw_grob(
+    grid::rectGrob(gp = grid::gpar(fill = scales::alpha('white', 0.95), col = 'grey70', lwd = 1.0)),
+    x = 0.03, y = 0.17, width = 0.25, height = 0.10
+  ) +
+  cowplot::draw_grob(legend_grob, x = 0.042, y = 0.191, width = 0.215, height = 0.060) +
+  cowplot::draw_grob(
+    grid::segmentsGrob(
+      x0 = grid::unit(0.71, 'npc'), y0 = grid::unit(0.59, 'npc'),
+      x1 = grid::unit(0.75, 'npc'), y1 = grid::unit(0.69, 'npc'),
+      arrow = grid::arrow(length = grid::unit(0.11, 'inches'), type = 'closed'),
+      gp = grid::gpar(col = 'grey25', lwd = 1.25)
+    )
+  ) +
+  cowplot::draw_grob(
+    grid::segmentsGrob(
+      x0 = grid::unit(0.86, 'npc'), y0 = grid::unit(0.60, 'npc'),
+      x1 = grid::unit(0.86, 'npc'), y1 = grid::unit(0.37, 'npc'),
+      arrow = grid::arrow(length = grid::unit(0.11, 'inches'), type = 'closed'),
+      gp = grid::gpar(col = 'grey25', lwd = 1.25)
+    )
+  )
 
-ggsave('./results/affected_region.jpg', width = 20, height = 10, units = 'cm', dpi=300)
+affected_region_plot
+
+ggsave('./results/affected_region.jpg', plot = affected_region_plot, width = 20, height = 11.25, units = 'cm', dpi = 300)
 
 geocode <- geocode %>%
   mutate(variable = case_when(
     raio == 1 ~ "Treated\n(Within Coverage)",
-    between(min_dist, 20, 30) ~ "Control\n(20–30 km)",
+    between(min_dist, 20, 30) ~ "Control\n(20â€“30 km)",
     between(min_dist, 0, 20) ~ "Non-Treated",
     TRUE ~ "Outside Buffer"
   ))
 
 
 
-# Filtrar apenas municípios com impacto severo/crítico para zoom e exibição
+# Filtrar apenas municÃ­pios com impacto severo/crÃ­tico para zoom e exibiÃ§Ã£o
 municipio_foco <- municipio %>%
-  filter(name_muni == 'Teresópolis')
+  filter(name_muni == 'TeresÃ³polis')
 
 
 # Bounding box original
 bbox_zoom <- sf::st_bbox(municipio_foco)
 
-# Fator de expansão (ex: 10% a mais em cada direção)
+# Fator de expansÃ£o (ex: 10% a mais em cada direÃ§Ã£o)
 expand_factor <- 1.5
 
 # Calcular larguras e alturas originais
@@ -301,13 +364,13 @@ p <- ggplot() +
   scale_fill_manual(
     values = c(
       "Treated\n(Within Coverage)" = "#B2182B",
-      "Control\n(20–30 km)" = "#2166AC",
+      "Control\n(20â€“30 km)" = "#2166AC",
       "Non-Treated" = "#999999",
       "Outside Buffer" = "white"
     ),
     breaks = c(
       "Treated\n(Within Coverage)",
-      "Control\n(20–30 km)",
+      "Control\n(20â€“30 km)",
       "Non-Treated",
       "Outside Buffer"
     ),
@@ -319,7 +382,7 @@ p <- ggplot() +
   ) + 
 
   
-  # Zoom na área de interesse
+  # Zoom na Ã¡rea de interesse
   coord_sf(
     xlim = c(bbox_zoom_expanded["xmin"], bbox_zoom_expanded["xmax"]),
     ylim = c(bbox_zoom_expanded["ymin"], bbox_zoom_expanded["ymax"]),
@@ -345,3 +408,4 @@ p
 
 ggsave('./results/pontos deslizamentos.jpg', width = 15, height = 10, units = 'cm',
        dpi=300)
+

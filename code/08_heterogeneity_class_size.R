@@ -9,10 +9,8 @@ library(writexl)
 
 rm(list = ls())
 
-
 ####### FUNCTIONS
 source('./code/00_functions.R')
-
 
 outcomes_principais     <- c('fechamento','log_docente',
                              'log_salas','log_num_funcionarios')
@@ -24,24 +22,14 @@ label <- c(
   "D. Log of Number of Staff"
 )
 
-
-# label <- c(
-#   "Fechamento da Escola",
-#   "Logaritmo do Número de Docentes",
-#   "Logaritmo do Número de Salas Existentes",
-#   "Logaritmo do Número de Funcionários"
-# )
-
-
-
 # Load dataset
 df <- arrow::read_parquet('./output/painel_escolas.parquet') %>% 
-  arrange(code_inep, ano) |> 
-  group_by(code_inep) |> 
-  filter(ano <= 2015) |> 
+  arrange(code_inep, ano) |>
+  group_by(code_inep) |>
+  filter(ano <= 2015) |>
   filter(raio == 1 | data.table::between(min_dist,25,30))
 
-# REGRESSÃO
+# REGRESSION
 
 df$pop_branca <- df$pop_branca*df$ano
 df$income_total <- df$income_total*df$ano
@@ -52,37 +40,62 @@ df$favela <- df$favela*df$ano
 
 controles <- c("income_total","pop_per_household","pop_branca","urban","favela")
 
-# Remover até 20 (até 30km)
-# renda media e escolaridade
-# fechamento. Alunos fundamental = 0 e existe fundamental
+# Heterogeneity: School size ----------------------------
+porte_levels <- c(
+  "Up to 50",
+  "51 to 150",
+  "151 to 300",
+  "301 to 500",
+  "More than 500"
+)
 
-df <- df |> 
-  group_by(code_inep) |> 
-  mutate(x = max(ifelse(ano == 2010, n_alunos_total, NA), na.rm = T),
-         porte_escola = ifelse(x < 100,"< 100",
-                        ifelse(x %in% c(101:500),"101 - 500",
-                        ifelse(x > 500,"501+",NA)))) 
-
-# Heterogeneidade: Tamanho da turma ----------------------------
+df <- df |>
+  group_by(code_inep) |>
+  mutate(
+    matriculas_2010 = ifelse(any(ano == 2010), max(ifelse(ano == 2010, n_alunos_total, NA), na.rm = TRUE), NA_real_),
+    matriculas_2010 = ifelse(is.infinite(matriculas_2010), NA_real_, matriculas_2010),
+    porte_escola = case_when(
+      matriculas_2010 <= 50 ~ "Up to 50",
+      dplyr::between(matriculas_2010, 51, 150) ~ "51 to 150",
+      dplyr::between(matriculas_2010, 151, 300) ~ "151 to 300",
+      dplyr::between(matriculas_2010, 301, 500) ~ "301 to 500",
+      matriculas_2010 > 500 ~ "More than 500",
+      TRUE ~ NA_character_
+    ),
+    porte_escola = factor(porte_escola, levels = porte_levels)
+  ) |>
+  ungroup()
 
 output <- do.call(rbind, lapply(outcomes_principais, function(feature) {
-  bind_rows(
-    process_plot_data(df = subset(df,  porte_escola == "< 100"), feature, type = "time_effect") %>% mutate(tipo = "< 100"),
-    process_plot_data(df = subset(df,  porte_escola == "101 - 500"), feature, type = "time_effect") %>% mutate(tipo = "101 - 500"),
-    process_plot_data(df = subset(df,  porte_escola == "501+"), feature, type = "time_effect") %>% mutate(tipo = "501+"),
-  )
+  bind_rows(lapply(porte_levels, function(grupo) {
+    process_plot_data(
+      df = subset(df, porte_escola == grupo),
+      feature,
+      type = "time_effect"
+    ) %>% mutate(tipo = grupo)
+  }))
 }))
 
 output$term <- output$term + 2010
+output$tipo <- factor(output$tipo, levels = porte_levels)
 
-output$tipo <- factor(output$tipo, levels = c("< 100","101 - 500","501+"))
+# Arrange plots
+school_size_plot <- plot_event_time_grid(
+  data = output,
+  style = 'legacy',
+  nrow = 2,
+  ncol = 2,
+  legend = 'bottom'
+)
 
-# Usando cowplot para arranjar os gráficos
-lapply(unique(output$Regression), plot_event_time) %>% 
-  ggpubr::ggarrange(plotlist = ., nrow = 2, ncol = 2,
-                    common.legend = TRUE, legend = "bottom")
+print(school_size_plot)
 
-
-# Salvando o gráfico
-ggsave(filename  = './results/tamanho_escola.jpg',
-       dpi = 300, width = 30, height = 15, units = 'cm')
+# Save plot
+ggsave(
+  filename = './results/tamanho_escola.jpg',
+  plot = school_size_plot,
+  dpi = 300,
+  width = 30,
+  height = 15,
+  units = 'cm'
+)
