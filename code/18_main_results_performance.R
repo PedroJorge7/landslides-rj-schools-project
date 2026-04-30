@@ -9,71 +9,21 @@ library(writexl)
 
 rm(list = ls())
 
-####### FUNCTIONS
 source("./code/00_functions.R")
+source("./code/00_performance_helpers.R")
 
+controles <- performance_controls
 
-# Load dataset
-df <- arrow::read_parquet("./output/painel_escolas.parquet") %>%
-  filter(ano <= 2015) %>%
-  filter(raio == 1 | data.table::between(min_dist, 20, 30)) %>%
-  mutate(
-    aprov_media = rowMeans(cbind(as.numeric(aprov_cat_fund), as.numeric(aprov_cat_medio)), na.rm = TRUE),
-    reprov_media = rowMeans(cbind(as.numeric(reprov_cat_fund), as.numeric(reprov_cat_medio)), na.rm = TRUE),
-    aband_media = rowMeans(cbind(as.numeric(aband_cat_fund), as.numeric(aband_cat_medio)), na.rm = TRUE),
-    ideb_media = rowMeans(cbind(as.numeric(ideb_ai), as.numeric(ideb_af), as.numeric(ideb_em)), na.rm = TRUE),
-    portugues_media = rowMeans(cbind(as.numeric(ideb_pt_ai), as.numeric(ideb_pt_af), as.numeric(ideb_pt_em)), na.rm = TRUE),
-    matematica_media = rowMeans(cbind(as.numeric(ideb_mat_ai), as.numeric(ideb_mat_af), as.numeric(ideb_mat_em)), na.rm = TRUE),
-    had_fund = as.numeric(had_fund),
-    had_medio = as.numeric(had_medio),
-    had_media = rowMeans(cbind(had_fund, had_medio), na.rm = TRUE),
-    tdi_fund = as.numeric(tdi_fund),
-    tdi_medio = as.numeric(tdi_medio),
-    tdi_media = rowMeans(cbind(tdi_fund, tdi_medio), na.rm = TRUE),
-    aprov_media = ifelse(is.nan(aprov_media), NA_real_, aprov_media),
-    reprov_media = ifelse(is.nan(reprov_media), NA_real_, reprov_media),
-    aband_media = ifelse(is.nan(aband_media), NA_real_, aband_media),
-    ideb_media = ifelse(is.nan(ideb_media), NA_real_, ideb_media),
-    portugues_media = ifelse(is.nan(portugues_media), NA_real_, portugues_media),
-    matematica_media = ifelse(is.nan(matematica_media), NA_real_, matematica_media),
-    had_media = ifelse(is.nan(had_media), NA_real_, had_media),
-    tdi_media = ifelse(is.nan(tdi_media), NA_real_, tdi_media)
-  )
+df_main <- performance_prepare_panel(limit_year = 2015)
+df_main <- performance_add_time_controls(df_main)
 
+outcomes_principais <- performance_available_outcomes(df_main, performance_main_outcomes)
 
-# REGRESSION
-df$pop_branca <- df$pop_branca * df$ano
-df$income_total <- df$income_total * df$ano
-df$pop_per_household <- df$pop_per_household * df$ano
-df$pop_total <- df$pop_total * df$ano
-df$urban <- df$urban * df$ano
-df$favela <- df$favela * df$ano
-
-controles <- c("income_total", "pop_per_household", "pop_branca", "urban", "favela")
-
-
-outcomes_candidatos <- c(
-  "aprov_media", "reprov_media", "aband_media",
-  "ideb_media", "portugues_media", "matematica_media",
-  "had_fund", "had_medio", "had_media",
-  "tdi_fund", "tdi_medio", "tdi_media"
-)
-
-outcomes_principais <- outcomes_candidatos[outcomes_candidatos %in% names(df)]
-
-tem_variacao <- function(feature) {
-  vals <- suppressWarnings(as.numeric(df[[feature]]))
-  vals <- vals[!is.na(vals)]
-  length(unique(vals)) > 1
-}
-
-outcomes_principais <- outcomes_principais[vapply(outcomes_principais, tem_variacao, logical(1))]
-
-if (!"fechamento" %in% names(df)) {
+if (!"fechamento" %in% names(df_main)) {
   stop("A coluna 'fechamento' nao existe no painel. Nao foi possivel montar a tabela.")
 }
 
-if (length(unique(df$fechamento[!is.na(df$fechamento)])) <= 1) {
+if (length(unique(df_main$fechamento[!is.na(df_main$fechamento)])) <= 1) {
   stop("A coluna 'fechamento' nao tem variacao suficiente para servir de ancora na tabela.")
 }
 
@@ -81,51 +31,75 @@ if (length(outcomes_principais) == 0) {
   stop("Nenhum outcome de desempenho com variacao suficiente foi encontrado no painel.")
 }
 
-cat("Outcomes de desempenho utilizados:\n")
+cat("Outcomes de desempenho utilizados na tabela principal:\n")
 cat(paste0("- ", outcomes_principais), sep = "\n")
 cat("\n")
 
-
-## Main results: desempenho (apenas especificacao com controle) ----------------------------
-get_control_column <- function(tbl, feature) {
-  col <- tbl[, ncol(tbl), drop = FALSE]
-  names(col) <- feature
-  col
-}
-
-mean_row_label <- process_feature(df = df, feature = "fechamento", type = "mean")[, 1, drop = FALSE]
-mean_control_list <- lapply(outcomes_principais, function(feature) {
-  tbl <- process_feature(df = df, feature = feature, type = "mean")
-  get_control_column(tbl, feature)
-})
-results_mean_effect <- do.call(cbind, c(list(mean_row_label), mean_control_list))
-names(results_mean_effect) <- c("", paste0("(", 1:(ncol(results_mean_effect) - 1), ")"))
-
-time_row_label <- process_feature(df = df, feature = "fechamento", type = "time_effect")[, 1, drop = FALSE]
-time_control_list <- lapply(outcomes_principais, function(feature) {
-  tbl <- process_feature(df = df, feature = feature, type = "time_effect")
-  get_control_column(tbl, feature)
-})
-results_effect <- do.call(cbind, c(list(time_row_label), time_control_list))
-names(results_effect) <- c("", paste0("(", 1:(ncol(results_effect) - 1), ")"))
-
-
-results_mean_effect <- to_df_fix_names(results_mean_effect)
-results_effect <- to_df_fix_names(results_effect)
-
-# Align columns
-all_cols <- union(names(results_mean_effect), names(results_effect))
-results_mean_effect <- add_missing_cols(results_mean_effect, all_cols)
-results_effect <- add_missing_cols(results_effect, all_cols)
-
-# Blank line
-blank_row <- as.data.frame(as.list(rep("", length(all_cols))),
-  stringsAsFactors = FALSE, check.names = FALSE
-)
-names(blank_row) <- all_cols
-
-# Bind (mean above, then time)
-results_all <- rbind(results_mean_effect, blank_row, results_effect)
-rownames(results_all) <- NULL
+results_mean_effect <- performance_build_columns(df_main, outcomes_principais, "mean", model_position = "last")
+results_effect <- performance_build_columns(df_main, outcomes_principais, "time_effect", model_position = "last")
+results_all <- performance_bind_with_blank(results_mean_effect, results_effect)
 
 write_xlsx(results_all, "./results/tb_main_results_performance.xlsx")
+write_latex_table(
+  results_all,
+  "./results/tb_main_results_performance.tex",
+  caption = "Main results for school abandonment and age-grade distortion.",
+  label = "tab:main_results_performance"
+)
+
+df_event <- performance_prepare_panel(limit_year = 2015, fill_controls = TRUE, add_period = TRUE)
+df_event <- performance_add_time_controls(df_event)
+
+outcomes_principais <- performance_available_outcomes(df_event, performance_event_outcomes)
+label <- performance_labels_for(outcomes_principais)
+
+if (length(outcomes_principais) == 0) {
+  stop("Nenhum outcome central de desempenho com variacao suficiente foi encontrado para o event study.")
+}
+
+cat("Outcomes de desempenho utilizados no event study:\n")
+cat(paste0("- ", outcomes_principais), sep = "\n")
+cat("\n")
+
+results_event_study <- performance_build_columns(df_event, outcomes_principais, "event_study", model_position = "first")
+write_xlsx(results_event_study, "./results/tb_event_study_performance.xlsx")
+write_latex_table(
+  results_event_study,
+  "./results/tb_event_study_performance.tex",
+  caption = "Event-study coefficients for school abandonment and age-grade distortion.",
+  label = "tab:event_study_performance"
+)
+
+output <- do.call(rbind, lapply(outcomes_principais, function(feature) {
+  process_plot_data(df = df_event, feature, type = "event_study")
+}))
+
+output <- output %>% tidyr::fill(Regression, .direction = "downup")
+valid_event_output <- output %>% dplyr::filter(!is.na(Regression), !is.na(estimate))
+
+if (!nrow(valid_event_output)) {
+  stop("Nao foi possivel estimar o event study para abandono e distorcao idade-serie.")
+}
+
+event_study_plots <- lapply(outcomes_principais, plot_event_study)
+event_study_panel <- cowplot::plot_grid(plotlist = event_study_plots, ncol = 2)
+
+print(event_study_panel)
+
+ggsave(
+  filename = "./results/event_study_school_flow.jpg",
+  plot = event_study_panel,
+  dpi = 300,
+  width = 40,
+  height = 20,
+  units = "cm"
+)
+
+ggsave(
+  filename = "./results/event_study_performance.jpg",
+  plot = event_study_panel,
+  dpi = 300,
+  width = 10,
+  height = 5,
+  units = "cm"
+)

@@ -374,13 +374,13 @@ plot_event_study <- function(x) {
     geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.5, color = "black") +
     scale_x_continuous(breaks = sort(unique(plot_data$parmseq))) +
     labs(
-      x = "Anos de exposicao",
-      y = "Coeficiente estimado",
+      x = "Years of exposure",
+      y = "Coefficient",
       title = label[match(x, outcomes_principais)]
     ) +
     theme_classic(base_size = 12) +
     theme(
-      plot.title = element_text(hjust = 0.5),
+      plot.title = element_text(hjust = 0.0),
       panel.grid.major.y = element_line(color = "grey88"),
       panel.grid.minor = element_blank()
     )

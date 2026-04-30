@@ -6,94 +6,49 @@ library(broom)
 library(openxlsx)
 library(tidyr)
 library(ggplot2)
+library(writexl)
 
 rm(list = ls())
 
-####### FUNCTIONS
-source('./code/00_functions.R')
+source("./code/00_functions.R")
+source("./code/00_performance_helpers.R")
 
-outcomes_principais <- c(
-  'aprov_media',
-  'reprov_media',
-  'aband_media',
-  'tdi_media_calc'
-)
+controles <- performance_controls
+outcomes_principais <- performance_event_outcomes
+label <- performance_labels_for(outcomes_principais)
 
-label <- c(
-  'A. Approval Rate',
-  'B. Failure Rate',
-  'C. School Abandonment Rate',
-  'D. Age-Grade Distortion Rate'
-)
+df <- performance_prepare_panel(limit_year = 2015, fill_controls = TRUE, add_period = TRUE)
+df <- performance_add_time_controls(df)
 
-build_stage_average <- function(df, fund_col, medio_col, output_col) {
-  if (!fund_col %in% names(df)) {
-    df[[fund_col]] <- NA_real_
-  }
+outcomes_principais <- performance_available_outcomes(df, outcomes_principais)
+label <- performance_labels_for(outcomes_principais)
 
-  if (!medio_col %in% names(df)) {
-    df[[medio_col]] <- NA_real_
-  }
-
-  df[[fund_col]] <- suppressWarnings(as.numeric(df[[fund_col]]))
-  df[[medio_col]] <- suppressWarnings(as.numeric(df[[medio_col]]))
-
-  df[[output_col]] <- dplyr::case_when(
-    !is.na(df[[fund_col]]) & !is.na(df[[medio_col]]) ~ rowMeans(cbind(df[[fund_col]], df[[medio_col]]), na.rm = TRUE),
-    !is.na(df[[fund_col]]) ~ df[[fund_col]],
-    !is.na(df[[medio_col]]) ~ df[[medio_col]],
-    TRUE ~ NA_real_
-  )
-
-  df
+if (length(outcomes_principais) == 0) {
+  stop("Nenhum outcome central de desempenho com variacao suficiente foi encontrado para o event study.")
 }
 
-# Load dataset
-df <- arrow::read_parquet('./output/painel_escolas.parquet') %>%
-  filter(ano <= 2015) |>
-  filter(raio == 1 | data.table::between(min_dist, 20, 30)) |>
-  tidyr::fill(
-    lat, lon, income_total,
-    pop_total, pop_per_household,
-    urban, favela, pop_water_network,
-    .direction = 'downup'
-  )
+cat("Outcomes de desempenho utilizados no event study:\n")
+cat(paste0("- ", outcomes_principais), sep = "\n")
+cat("\n")
 
-df <- build_stage_average(df, 'aprov_cat_fund', 'aprov_cat_medio', 'aprov_media')
-df <- build_stage_average(df, 'reprov_cat_fund', 'reprov_cat_medio', 'reprov_media')
-df <- build_stage_average(df, 'aband_cat_fund', 'aband_cat_medio', 'aband_media')
-df <- build_stage_average(df, 'tdi_fund', 'tdi_medio', 'tdi_media_calc')
-
-for (feature in outcomes_principais) {
-  feature_values <- df[[feature]][!is.na(df[[feature]])]
-  if (length(unique(feature_values)) <= 1) {
-    stop(paste0("A variavel '", feature, "' nao tem variacao suficiente para estimar o event study."))
-  }
-}
-
-df$period <- df$ano - 2011 + 1
-
-# REGRESSION
-
-df$pop_branca <- df$pop_branca * df$ano
-df$income_total <- df$income_total * df$ano
-df$pop_per_household <- df$pop_per_household * df$ano
-df$pop_total <- df$pop_total * df$ano
-df$urban <- df$urban * df$ano
-df$favela <- df$favela * df$ano
-
-controles <- c('income_total', 'pop_per_household', 'pop_branca', 'urban', 'favela')
-
-## Event study plot ----------------------------
+results_event_study <- performance_build_columns(df, outcomes_principais, "event_study", model_position = "first")
+write_xlsx(results_event_study, "./results/tb_event_study_performance.xlsx")
+write_latex_table(
+  results_event_study,
+  "./results/tb_event_study_performance.tex",
+  caption = "Event-study coefficients for school abandonment and age-grade distortion.",
+  label = "tab:event_study_performance"
+)
 
 output <- do.call(rbind, lapply(outcomes_principais, function(feature) {
-  process_plot_data(df = df, feature, type = 'event_study')
+  process_plot_data(df = df, feature, type = "event_study")
 }))
 
-output <- output %>% tidyr::fill(Regression, .direction = 'downup')
+output <- output %>% tidyr::fill(Regression, .direction = "downup")
+valid_event_output <- output %>% dplyr::filter(!is.na(Regression), !is.na(estimate))
 
-if (!nrow(output) || all(is.na(output$estimate))) {
-  stop('Nao foi possivel estimar o event study para aprovacao, reprovacao, abandono e distorcao idade-serie.')
+if (!nrow(valid_event_output)) {
+  stop("Nao foi possivel estimar o event study para abandono e distorcao idade-serie.")
 }
 
 event_study_plots <- lapply(outcomes_principais, plot_event_study)
@@ -102,10 +57,19 @@ event_study_panel <- cowplot::plot_grid(plotlist = event_study_plots, ncol = 2)
 print(event_study_panel)
 
 ggsave(
-  filename = './results/event_study_school_flow.jpg',
+  filename = "./results/event_study_school_flow.jpg",
   plot = event_study_panel,
   dpi = 300,
   width = 40,
   height = 20,
-  units = 'cm'
+  units = "cm"
+)
+
+ggsave(
+  filename = "./results/event_study_performance.jpg",
+  plot = event_study_panel,
+  dpi = 300,
+  width = 40,
+  height = 20,
+  units = "cm"
 )
